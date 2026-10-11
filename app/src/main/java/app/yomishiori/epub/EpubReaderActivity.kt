@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.widget.FrameLayout
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
@@ -23,6 +24,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import app.yomishiori.R
 import app.yomishiori.container
+import app.yomishiori.openReader
 import app.yomishiori.ui.theme.YomishioriTheme
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
@@ -47,6 +49,8 @@ class EpubReaderActivity : AppCompatActivity() {
 
     private var chromeVisible by mutableStateOf(false)
     private var locator by mutableStateOf<Locator?>(null)
+    private var chapter by mutableStateOf<String?>(null)
+    private var chapters: ChapterTitles? = null
     private var preferences by mutableStateOf(EpubPreferences())
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,9 +60,18 @@ class EpubReaderActivity : AppCompatActivity() {
             supportFragmentManager.fragmentFactory = EpubNavigatorFragment.createDummyFactory()
             super.onCreate(savedInstanceState)
             finish()
+            val app = applicationContext
+            container.applicationScope.launch {
+                try {
+                    container.progressRepository.getSource(sourceId)?.let { openReader(app, it) }
+                } catch (e: Exception) {
+                    Toast.makeText(app, e.message ?: "Cannot open the book.", Toast.LENGTH_LONG).show()
+                }
+            }
             return
         }
         session = s
+        chapters = ChapterTitles(s.publication)
         preferences = s.preferences
         supportFragmentManager.fragmentFactory = EpubNavigatorFactory(s.publication).createFragmentFactory(
             initialLocator = s.locator,
@@ -80,6 +93,7 @@ class EpubReaderActivity : AppCompatActivity() {
                             visible = chromeVisible,
                             title = s.publication.metadata.title.orEmpty(),
                             locator = locator,
+                            chapter = chapter,
                             toc = s.publication.tableOfContents,
                             preferences = preferences,
                             onBack = ::finish,
@@ -114,6 +128,7 @@ class EpubReaderActivity : AppCompatActivity() {
                 navigator.currentLocator.collect {
                     locator = it
                     s.locator = it
+                    chapter = chapters?.titleFor(it)
                 }
             }
         }
@@ -142,7 +157,7 @@ class EpubReaderActivity : AppCompatActivity() {
                 sourceId = s.sourceId,
                 locatorJson = locator.toJSON().toString(),
                 progression = locator.locations.totalProgression,
-                chapterLabel = locator.title,
+                chapterLabel = chapters?.titleFor(locator),
             )
         }
     }

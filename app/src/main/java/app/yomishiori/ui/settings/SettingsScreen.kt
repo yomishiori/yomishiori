@@ -3,6 +3,7 @@ package app.yomishiori.ui.settings
 import android.webkit.CookieManager
 import android.webkit.WebStorage
 import android.webkit.WebView
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -79,7 +80,7 @@ fun SettingsScreen() {
     var licenses by remember { mutableStateOf(false) }
 
     fun update(block: (AppSettings) -> AppSettings) = scope.launch { c.preferences.update(block) }
-    fun runBackupTask(success: (Int?) -> String, task: suspend () -> Int?) = scope.launch {
+    fun runBackupTask(success: (Int?) -> String, task: suspend () -> Int?) = c.applicationScope.launch {
         busy = true
         val message = try {
             success(task())
@@ -87,7 +88,7 @@ fun SettingsScreen() {
             "Failed: ${e.message}"
         }
         busy = false
-        snackbar.showSnackbar(message)
+        Toast.makeText(context.applicationContext, message, Toast.LENGTH_LONG).show()
     }
 
     val exportJson = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->

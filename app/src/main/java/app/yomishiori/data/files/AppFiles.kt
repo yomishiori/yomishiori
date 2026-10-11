@@ -14,7 +14,7 @@ class AppFiles(private val context: Context) {
     val coverDir: File get() = File(root, COVERS).apply { mkdirs() }
 
     fun newEpubFile(): File = File(epubDir, "${UUID.randomUUID()}.epub")
-    fun newCoverFile(): File = File(coverDir, "${UUID.randomUUID()}.png")
+    fun newCoverFile(): File = File(coverDir, "${UUID.randomUUID()}.jpg")
 
     fun copyFromUri(uri: Uri, dest: File) {
         val size = sizeOf(uri)
@@ -33,7 +33,7 @@ class AppFiles(private val context: Context) {
 
     fun saveCover(bitmap: Bitmap): File {
         val file = newCoverFile()
-        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
         return file
     }
 

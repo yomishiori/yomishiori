@@ -5,7 +5,7 @@ import java.net.URI
 enum class RejectReason(val message: String) {
     NOT_WEB("Not a web page"),
     OTHER_SITE("Different site, not tracked"),
-    EXCLUDED_PAGE("Login page, not tracked"),
+    EXCLUDED_PAGE("Login or security check page, not tracked"),
     PAUSED("Tracking paused"),
     REDIRECTED("Redirected from your saved page, not saved"),
 }
@@ -22,7 +22,7 @@ object UrlProgressPolicy {
         val host = uri.host?.lowercase() ?: return RejectReason.NOT_WEB
         if (!matchesSite(host, originalUrl, hostRule)) return RejectReason.OTHER_SITE
         val segments = uri.rawPath.orEmpty().lowercase().split('/')
-        if (segments.any { it in excludedSegments }) return RejectReason.EXCLUDED_PAGE
+        if (segments.any { it in excludedSegments } || uri.rawQuery.orEmpty().contains("__cf_chl")) return RejectReason.EXCLUDED_PAGE
         return null
     }
 

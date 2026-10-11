@@ -61,6 +61,7 @@ fun EpubReaderChrome(
     visible: Boolean,
     title: String,
     locator: Locator?,
+    chapter: String?,
     toc: List<Link>,
     preferences: EpubPreferences,
     onBack: () -> Unit,
@@ -77,7 +78,7 @@ fun EpubReaderChrome(
                 title = {
                     Column {
                         Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        locator?.title?.let {
+                        chapter?.let {
                             Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
@@ -98,7 +99,7 @@ fun EpubReaderChrome(
             enter = slideInVertically { it },
             exit = slideOutVertically { it },
         ) {
-            ProgressBar(locator, onSeek)
+            ProgressBar(locator, chapter, onSeek)
         }
     }
 
@@ -118,7 +119,7 @@ fun EpubReaderChrome(
 }
 
 @Composable
-private fun ProgressBar(locator: Locator?, onSeek: (Double) -> Unit) {
+private fun ProgressBar(locator: Locator?, chapter: String?, onSeek: (Double) -> Unit) {
     val progression = locator?.locations?.totalProgression ?: 0.0
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableFloatStateOf(0f) }
@@ -126,7 +127,7 @@ private fun ProgressBar(locator: Locator?, onSeek: (Double) -> Unit) {
         Column(Modifier.navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    locator?.title.orEmpty(),
+                    chapter.orEmpty(),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

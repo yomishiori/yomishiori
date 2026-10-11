@@ -22,6 +22,6 @@ class AppContainer(context: Context) {
     val libraryRepository = LibraryRepository(database, files)
     val progressRepository = ProgressRepository(database)
     val readium = ReadiumServices(context, files)
-    val epubSessions = EpubSessions()
+    val epubSessions = EpubSessions(applicationScope)
     val backupManager = BackupManager(context, database, files)
 }

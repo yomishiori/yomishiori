@@ -52,6 +52,17 @@ class LibraryFilterTest {
         assertEquals(emptyList<Long>(), run(category = 999))
     }
 
+    @Test fun `search works for chinese and arabic titles`() {
+        val more = items + listOf(
+            item(4, "晨雾里的小城", ReadingStatus.READING, ContentType.EPUB, added = 4, read = null, progress = null, alt = listOf("春江花月夜")),
+            item(5, "رحلة الصباح", ReadingStatus.READING, ContentType.EPUB, added = 5, read = null, progress = null),
+        )
+        fun find(q: String) = LibraryFilter.apply(more, memberships, q, null, emptySet(), emptySet(), LibrarySort.TITLE, true).map { it.entry.id }
+        assertEquals(listOf(4L), find("小城"))
+        assertEquals(listOf(4L), find("花月"))
+        assertEquals(listOf(5L), find("الصباح"))
+    }
+
     @Test fun `search matches alternative titles and ignores width and case`() {
         assertEquals(listOf(1L), run(query = "ブラボ"))
         assertEquals(listOf(2L), run(query = "ＡＬＰ"))

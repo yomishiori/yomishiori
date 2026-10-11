@@ -173,7 +173,7 @@ class WebReaderActivity : ComponentActivity() {
 
         override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
             debugLog("http ${response.statusCode} main=${request.isForMainFrame}", request.url.toString())
-            if (request.isForMainFrame && response.statusCode >= 400) viewModel.onMainFrameError("HTTP ${response.statusCode}", request.url.toString())
+            if (request.isForMainFrame && response.statusCode >= 400) viewModel.onMainFrameError(httpErrorMessage(response.statusCode), request.url.toString())
         }
 
         override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
@@ -223,4 +223,12 @@ class WebReaderActivity : ComponentActivity() {
 
 private fun debugLog(event: String, url: String) {
     if (app.yomishiori.BuildConfig.DEBUG) android.util.Log.d("YomishioriWeb", "$event $url")
+}
+
+private fun httpErrorMessage(code: Int) = when (code) {
+    401, 403 -> "Access blocked. If the page shows a security check, complete it to continue."
+    404, 410 -> "Page not found"
+    429 -> "Too many requests. Wait a moment and reload."
+    in 500..599 -> "The site is having problems ($code). Try reloading."
+    else -> "The page couldn't be loaded ($code)"
 }

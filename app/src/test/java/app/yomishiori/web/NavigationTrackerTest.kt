@@ -58,6 +58,15 @@ class NavigationTrackerTest {
         assertNull(tracker.onPageFinished("https://a.com/missing"))
     }
 
+    @Test fun `same url loading fine after a security check is confirmed`() {
+        tracker.onMainFrameError("https://a.com/ch7")
+        tracker.onPageStarted("https://a.com/ch7")
+        assertNull(tracker.onPageCommitVisible("https://a.com/ch7"))
+        assertNull(tracker.onPageFinished("https://a.com/ch7"))
+        tracker.onPageStarted("https://a.com/ch7")
+        assertEquals("https://a.com/ch7", tracker.onPageCommitVisible("https://a.com/ch7"))
+    }
+
     @Test fun `network error mid load is never confirmed`() {
         tracker.onPageStarted("https://a.com/ch3")
         tracker.onMainFrameError("https://a.com/ch3")

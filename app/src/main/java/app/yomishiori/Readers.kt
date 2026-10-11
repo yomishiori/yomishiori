@@ -1,6 +1,8 @@
 package app.yomishiori
 
+import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
@@ -18,7 +20,7 @@ import java.io.File
 
 suspend fun openReader(context: Context, source: ReadingSource) {
     when (source.sourceType) {
-        SourceType.WEB_URL -> context.startActivity(WebReaderActivity.intent(context, source.id))
+        SourceType.WEB_URL -> context.launch(WebReaderActivity.intent(context, source.id))
         SourceType.EPUB_FILE -> {
             val c = context.container
             val path = source.localFilePath ?: error("This source has no EPUB file.")
@@ -26,7 +28,7 @@ suspend fun openReader(context: Context, source: ReadingSource) {
             val locator = source.locatorJson?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
             val preferences = epubPreferencesOf(c.preferences.current().epubPreferencesJson)
             c.epubSessions.put(EpubSession(source.id, publication, locator, preferences))
-            context.startActivity(EpubReaderActivity.intent(context, source.id))
+            context.launch(EpubReaderActivity.intent(context, source.id))
         }
     }
 }
@@ -46,3 +48,6 @@ fun rememberReaderOpener(): (Long) -> Unit {
         }
     }
 }
+
+private fun Context.launch(intent: Intent) =
+    startActivity(if (this is Activity) intent else intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

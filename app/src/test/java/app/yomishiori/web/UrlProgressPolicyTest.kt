@@ -35,6 +35,7 @@ class UrlProgressPolicyTest {
         assertEquals(RejectReason.EXCLUDED_PAGE, reason("https://example.com/login?next=/ch2"))
         assertEquals(RejectReason.EXCLUDED_PAGE, reason("https://example.com/user/Account/settings"))
         assertEquals(RejectReason.EXCLUDED_PAGE, reason("https://example.com/cdn-cgi/challenge-platform/x"))
+        assertEquals(RejectReason.EXCLUDED_PAGE, reason("https://example.com/shuukura/ch2/?__cf_chl_tk=abc"))
         assertNull(reason("https://example.com/shuukura/the-login-arc"))
     }
 
