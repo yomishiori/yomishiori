@@ -52,6 +52,7 @@ import app.yomishiori.data.db.Category
 import app.yomishiori.data.prefs.AppSettings
 import app.yomishiori.data.prefs.ThemeMode
 import app.yomishiori.epub.ReaderSettings
+import app.yomishiori.epub.TutorialBook
 import app.yomishiori.epub.epubPreferencesOf
 import app.yomishiori.ui.components.AppBottomSheet
 import app.yomishiori.ui.components.ConfirmDialog
@@ -160,6 +161,15 @@ fun SettingsScreen() {
 
             Section("About")
             Item("Yomishiori ${BuildConfig.VERSION_NAME}", "Local-first reader for EPUBs, light novels and web novels. No account, no tracking.") {}
+            Item("Show tutorial again", "Open the short guide on reading with Yomishiori") {
+                scope.launch {
+                    try {
+                        TutorialBook.open(context)
+                    } catch (e: Exception) {
+                        Toast.makeText(context, e.message ?: "Couldn't open the tutorial.", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
             Item("Open-source licenses", "Readium, AndroidX, Kotlin, Coil, OkHttp") { licenses = true }
         }
     }
@@ -189,9 +199,12 @@ fun SettingsScreen() {
     }
     if (readerSheet) {
         AppBottomSheet(onDismissRequest = { readerSheet = false }) {
-            ReaderSettings(epubPreferencesOf(settings.epubPreferencesJson)) { prefs ->
-                update { it.copy(epubPreferencesJson = EpubPreferencesSerializer().serialize(prefs)) }
-            }
+            ReaderSettings(
+                preferences = epubPreferencesOf(settings.epubPreferencesJson),
+                onChange = { prefs -> update { it.copy(epubPreferencesJson = EpubPreferencesSerializer().serialize(prefs)) } },
+                reader = settings.reader,
+                onReaderChange = { reader -> update { it.copy(reader = reader) } },
+            )
         }
     }
     if (clearBrowserData) {

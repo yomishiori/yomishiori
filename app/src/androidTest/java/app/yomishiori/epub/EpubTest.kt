@@ -21,6 +21,7 @@ import org.junit.runner.RunWith
 import org.readium.r2.navigator.epub.EpubPreferences
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.services.locateProgression
+import org.readium.r2.shared.util.use
 import java.io.File
 import kotlin.math.abs
 
@@ -29,6 +30,15 @@ class EpubTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Before fun setUp() = resetAppData()
+
+    @Test fun reflowableChaptersGetTheReaderScript() = runBlocking<Unit> {
+        val imported = testContainer.readium.import(Uri.fromFile(writeTestEpub(File(context.cacheDir, "inject.epub"))))
+        val publication = testContainer.readium.open(File(imported.filePath))
+        val html = publication.get(publication.readingOrder.first())!!.use { it.read().getOrNull()!! }.decodeToString()
+        assertTrue(html.contains("yomishiori-reader"))
+        assertTrue(html.indexOf("yomishiori-reader") < html.indexOf("</head>"))
+        publication.close()
+    }
 
     @Test fun importCopiesFileAndExtractsMetadataAndCover() = runBlocking<Unit> {
         val picked = writeTestEpub(File(context.cacheDir, "picked.epub"), title = "異世界の本", author = "作者")

@@ -53,6 +53,15 @@ import app.yomishiori.util.formatPercent
 import org.readium.r2.navigator.epub.EpubPreferences
 import org.readium.r2.navigator.preferences.FontFamily
 import org.readium.r2.navigator.preferences.Theme
+import app.yomishiori.data.prefs.PageTurnDirection
+import app.yomishiori.data.prefs.ReaderPrefs
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Button
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextAlign
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 
@@ -64,10 +73,15 @@ fun EpubReaderChrome(
     chapter: String?,
     toc: List<Link>,
     preferences: EpubPreferences,
+    reader: ReaderPrefs,
+    showHints: Boolean,
+    nextPageIsLeft: Boolean,
     onBack: () -> Unit,
     onTocClick: (Link) -> Unit,
     onSeek: (Double) -> Unit,
     onPreferencesChange: (EpubPreferences) -> Unit,
+    onReaderChange: (ReaderPrefs) -> Unit,
+    onHintsDismiss: () -> Unit,
 ) {
     var showToc by rememberSaveable { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
@@ -101,6 +115,7 @@ fun EpubReaderChrome(
         ) {
             ProgressBar(locator, chapter, onSeek)
         }
+        if (showHints) GestureHints(nextPageIsLeft, onHintsDismiss)
     }
 
     if (showToc) {
@@ -113,7 +128,7 @@ fun EpubReaderChrome(
     }
     if (showSettings) {
         AppBottomSheet(onDismissRequest = { showSettings = false }) {
-            ReaderSettings(preferences, onPreferencesChange)
+            ReaderSettings(preferences, onPreferencesChange, reader, onReaderChange)
         }
     }
 }
@@ -180,13 +195,34 @@ private val fontChoices = listOf(
 )
 
 @Composable
-fun ReaderSettings(preferences: EpubPreferences, onChange: (EpubPreferences) -> Unit) {
+fun ReaderSettings(
+    preferences: EpubPreferences,
+    onChange: (EpubPreferences) -> Unit,
+    reader: ReaderPrefs,
+    onReaderChange: (ReaderPrefs) -> Unit,
+) {
     Column(
         Modifier
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        Text("Turning pages", style = MaterialTheme.typography.titleSmall)
+        Text("Double-tap the left or right side of the page.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val directions = PageTurnDirection.entries
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            directions.forEachIndexed { i, direction ->
+                SegmentedButton(
+                    selected = reader.pageTurn == direction,
+                    onClick = { onReaderChange(reader.copy(pageTurn = direction)) },
+                    shape = SegmentedButtonDefaults.itemShape(i, directions.size),
+                ) { Text(direction.label, maxLines = 1, style = MaterialTheme.typography.labelMedium) }
+            }
+        }
+        SwitchRow("Swipe to turn pages", reader.swipeToTurn) { onReaderChange(reader.copy(swipeToTurn = it)) }
+        SwitchRow("Tap pictures to zoom", reader.tapToZoom) { onReaderChange(reader.copy(tapToZoom = it)) }
+        HorizontalDivider()
+
         Text("Theme", style = MaterialTheme.typography.titleSmall)
         val themes = listOf(Theme.LIGHT to "Light", Theme.SEPIA to "Sepia", Theme.DARK to "Dark")
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
@@ -253,5 +289,44 @@ private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Text(label, modifier = Modifier.weight(1f))
         Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+@Composable
+private fun GestureHints(nextPageIsLeft: Boolean, onDismiss: () -> Unit) {
+    val previous = "Double-tap\nprevious page"
+    val next = "Double-tap\nnext page"
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.78f))
+            .clickable(onClick = onDismiss)
+            .testTag("gesture_hints"),
+    ) {
+        Row(Modifier.fillMaxWidth().weight(1f)) {
+            HintZone(if (nextPageIsLeft) next else previous, Modifier.weight(1f))
+            Box(Modifier.fillMaxHeight().width(1.dp).background(Color.White.copy(alpha = 0.5f)))
+            HintZone(if (nextPageIsLeft) previous else next, Modifier.weight(1f))
+        }
+        Column(
+            Modifier.fillMaxWidth().navigationBarsPadding().padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                "Tap once anywhere to show the menu.\nTap a picture to zoom in.",
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Button(onClick = onDismiss) { Text("Got it") }
+        }
+    }
+}
+
+@Composable
+private fun HintZone(text: String, modifier: Modifier) {
+    Box(modifier.fillMaxHeight(), contentAlignment = Alignment.Center) {
+        Text(text, color = Color.White, textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium)
     }
 }

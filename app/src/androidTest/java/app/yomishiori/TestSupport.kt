@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import androidx.test.platform.app.InstrumentationRegistry
+import app.yomishiori.data.prefs.ReaderPrefs
 import kotlinx.coroutines.runBlocking
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -19,6 +20,7 @@ fun resetAppData(): Unit = runBlocking {
     val files = testContainer.files
     files.epubDir.deleteRecursively()
     files.coverDir.deleteRecursively()
+    testContainer.preferences.update { it.copy(reader = ReaderPrefs(), tutorialDone = true, readerHintsShown = true) }
     Unit
 }
 
