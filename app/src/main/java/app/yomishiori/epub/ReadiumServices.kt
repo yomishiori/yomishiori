@@ -8,11 +8,15 @@ import android.util.Size
 import app.yomishiori.data.files.AppFiles
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.readium.r2.shared.publication.Layout
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.encryption.encryption
 import org.readium.r2.shared.publication.services.coverFitting
 import org.readium.r2.shared.publication.services.isRestricted
+import org.readium.r2.shared.util.Try
 import org.readium.r2.shared.util.asset.AssetRetriever
+import org.readium.r2.shared.util.resource.TransformingContainer
+import org.readium.r2.shared.util.resource.map
 import org.readium.r2.shared.util.use
 import org.readium.r2.shared.util.getOrElse
 import org.readium.r2.shared.util.http.DefaultHttpClient
@@ -39,7 +43,13 @@ class ReadiumServices(context: Context, private val files: AppFiles) {
     suspend fun open(file: File): Publication = withContext(Dispatchers.IO) {
         if (!file.exists()) throw IOException("The EPUB file is missing. Re-import it from the details screen.")
         val asset = assetRetriever.retrieve(file).getOrElse { throw IOException(UNREADABLE) }
-        val publication = opener.open(asset, allowUserInteraction = false).getOrElse {
+        val publication = opener.open(asset, allowUserInteraction = false, onCreatePublication = {
+            if (manifest.metadata.layout != Layout.FIXED) {
+                container = TransformingContainer(container) { url, resource ->
+                    if (ReaderHtml.isHtml(url.path.orEmpty())) resource.map { Try.success(ReaderHtml.inject(it)) } else resource
+                }
+            }
+        }).getOrElse {
             asset.close()
             throw IOException(UNREADABLE)
         }

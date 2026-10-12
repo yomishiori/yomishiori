@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.map
 enum class ThemeMode(val label: String) { SYSTEM("System"), LIGHT("Light"), DARK("Dark") }
 enum class LibraryDisplay(val label: String) { GRID("Grid"), COMPACT_GRID("Compact grid"), LIST("List") }
 enum class LibrarySort(val label: String) { TITLE("Title"), DATE_ADDED("Date added"), LAST_READ("Last read"), PROGRESS("Progress") }
+enum class PageTurnDirection(val label: String) { AUTO("Follow the book"), LEFT_TO_RIGHT("Right = next"), RIGHT_TO_LEFT("Left = next") }
 
 data class LibraryPrefs(
     val display: LibraryDisplay = LibraryDisplay.GRID,
@@ -38,12 +39,21 @@ data class BrowserPrefs(
     val immersiveByDefault: Boolean = false,
 )
 
+data class ReaderPrefs(
+    val pageTurn: PageTurnDirection = PageTurnDirection.AUTO,
+    val swipeToTurn: Boolean = false,
+    val tapToZoom: Boolean = true,
+)
+
 data class AppSettings(
     val theme: ThemeMode = ThemeMode.SYSTEM,
     val dynamicColor: Boolean = true,
     val library: LibraryPrefs = LibraryPrefs(),
     val browser: BrowserPrefs = BrowserPrefs(),
     val epubPreferencesJson: String? = null,
+    val reader: ReaderPrefs = ReaderPrefs(),
+    val tutorialDone: Boolean = false,
+    val readerHintsShown: Boolean = false,
 )
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
@@ -78,6 +88,13 @@ class AppPreferences(private val context: Context) {
             immersiveByDefault = this[WEB_IMMERSIVE] ?: false,
         ),
         epubPreferencesJson = this[EPUB_PREFS],
+        reader = ReaderPrefs(
+            pageTurn = enumOr(this[READER_PAGE_TURN], PageTurnDirection.AUTO),
+            swipeToTurn = this[READER_SWIPE] ?: false,
+            tapToZoom = this[READER_ZOOM] ?: true,
+        ),
+        tutorialDone = this[TUTORIAL_DONE] ?: false,
+        readerHintsShown = this[READER_HINTS] ?: false,
     )
 
     private fun MutablePreferences.write(s: AppSettings) {
@@ -97,6 +114,11 @@ class AppPreferences(private val context: Context) {
         this[WEB_3P_COOKIES] = s.browser.thirdPartyCookies
         this[WEB_IMMERSIVE] = s.browser.immersiveByDefault
         if (s.epubPreferencesJson != null) this[EPUB_PREFS] = s.epubPreferencesJson else remove(EPUB_PREFS)
+        this[READER_PAGE_TURN] = s.reader.pageTurn.name
+        this[READER_SWIPE] = s.reader.swipeToTurn
+        this[READER_ZOOM] = s.reader.tapToZoom
+        this[TUTORIAL_DONE] = s.tutorialDone
+        this[READER_HINTS] = s.readerHintsShown
     }
 
     private companion object {
@@ -116,6 +138,11 @@ class AppPreferences(private val context: Context) {
         val WEB_3P_COOKIES = booleanPreferencesKey("web_third_party_cookies")
         val WEB_IMMERSIVE = booleanPreferencesKey("web_immersive")
         val EPUB_PREFS = stringPreferencesKey("epub_preferences")
+        val READER_PAGE_TURN = stringPreferencesKey("reader_page_turn")
+        val READER_SWIPE = booleanPreferencesKey("reader_swipe_to_turn")
+        val READER_ZOOM = booleanPreferencesKey("reader_tap_to_zoom")
+        val TUTORIAL_DONE = booleanPreferencesKey("tutorial_done")
+        val READER_HINTS = booleanPreferencesKey("reader_hints_shown")
     }
 }
 

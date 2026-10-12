@@ -3,7 +3,10 @@ package app.yomishiori.epub
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.widget.FrameLayout
 import android.widget.Toast
@@ -24,21 +27,27 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import app.yomishiori.R
 import app.yomishiori.container
+import app.yomishiori.data.prefs.ReaderPrefs
 import app.yomishiori.openReader
 import app.yomishiori.ui.theme.YomishioriTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
 import org.readium.r2.navigator.epub.EpubPreferencesSerializer
 import org.readium.r2.navigator.input.InputListener
 import org.readium.r2.navigator.input.TapEvent
+import org.readium.r2.navigator.preferences.ReadingProgression
 import org.readium.r2.navigator.util.DirectionalNavigationAdapter
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
+import org.readium.r2.shared.publication.services.content.Content
 import org.readium.r2.shared.publication.services.locateProgression
 import org.readium.r2.shared.util.AbsoluteUrl
+import org.readium.r2.shared.util.use
 
 fun epubPreferencesOf(json: String?): EpubPreferences =
     json?.let { runCatching { EpubPreferencesSerializer().deserialize(it) }.getOrNull() } ?: EpubPreferences()
@@ -46,12 +55,21 @@ fun epubPreferencesOf(json: String?): EpubPreferences =
 class EpubReaderActivity : AppCompatActivity() {
     private var session: EpubSession? = null
     private lateinit var navigator: EpubNavigatorFragment
+    private lateinit var swipeLayout: SwipeBlockingLayout
 
     private var chromeVisible by mutableStateOf(false)
     private var locator by mutableStateOf<Locator?>(null)
     private var chapter by mutableStateOf<String?>(null)
     private var chapters: ChapterTitles? = null
     private var preferences by mutableStateOf(EpubPreferences())
+    private var readerPrefs by mutableStateOf(ReaderPrefs())
+    private var bookIsRtl by mutableStateOf(false)
+    private var showHints by mutableStateOf(false)
+    private var zoomed by mutableStateOf<Pair<Bitmap, String?>?>(null)
+
+    private val tapHandler = Handler(Looper.getMainLooper())
+    private var pendingTap: Runnable? = null
+    private var lastTapLeft = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val sourceId = intent.getLongExtra(EXTRA_SOURCE_ID, -1)
@@ -84,7 +102,10 @@ class EpubReaderActivity : AppCompatActivity() {
         enableEdgeToEdge()
 
         val root = FrameLayout(this)
-        root.addView(FragmentContainerView(this).apply { id = R.id.reader_container }, MATCH_PARENT, MATCH_PARENT)
+        swipeLayout = SwipeBlockingLayout(this).apply {
+            addView(FragmentContainerView(context).apply { id = R.id.reader_container }, MATCH_PARENT, MATCH_PARENT)
+        }
+        root.addView(swipeLayout, MATCH_PARENT, MATCH_PARENT)
         root.addView(
             ComposeView(this).apply {
                 setContent {
@@ -96,11 +117,17 @@ class EpubReaderActivity : AppCompatActivity() {
                             chapter = chapter,
                             toc = s.publication.tableOfContents,
                             preferences = preferences,
+                            reader = readerPrefs,
+                            showHints = showHints,
+                            nextPageIsLeft = nextPageIsLeft(readerPrefs.pageTurn, bookIsRtl),
                             onBack = ::finish,
                             onTocClick = ::goTo,
                             onSeek = ::seek,
                             onPreferencesChange = ::applyPreferences,
+                            onReaderChange = ::applyReaderPrefs,
+                            onHintsDismiss = ::dismissHints,
                         )
+                        zoomed?.let { (bitmap, description) -> ImageViewer(bitmap, description) { zoomed = null } }
                     }
                 }
             },
@@ -114,12 +141,9 @@ class EpubReaderActivity : AppCompatActivity() {
             }
         }
         navigator = supportFragmentManager.findFragmentByTag(NAVIGATOR_TAG) as EpubNavigatorFragment
-        navigator.addInputListener(DirectionalNavigationAdapter(navigator))
+        navigator.addInputListener(DirectionalNavigationAdapter(navigator, tapEdges = emptySet()))
         navigator.addInputListener(object : InputListener {
-            override fun onTap(event: TapEvent): Boolean {
-                showChrome(!chromeVisible)
-                return true
-            }
+            override fun onTap(event: TapEvent): Boolean = handleTap(event)
         })
         showChrome(false)
 
@@ -137,6 +161,20 @@ class EpubReaderActivity : AppCompatActivity() {
                 navigator.currentLocator.debounce(1_000).collect(::save)
             }
         }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                navigator.overflow.collect { bookIsRtl = it.readingProgression == ReadingProgression.RTL }
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                container.preferences.settings.collect {
+                    readerPrefs = it.reader
+                    swipeLayout.blockHorizontalSwipes = !it.reader.swipeToTurn
+                    showHints = !it.readerHintsShown
+                }
+            }
+        }
     }
 
     override fun onStop() {
@@ -145,8 +183,50 @@ class EpubReaderActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        tapHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
         if (isFinishing) session?.let { container.epubSessions.close(it.sourceId) }
+    }
+
+    private fun handleTap(event: TapEvent): Boolean {
+        val width = navigator.view?.width?.takeIf { it > 0 } ?: window.decorView.width
+        val left = event.point.x < width / 2f
+        val pending = pendingTap
+        if (pending != null) {
+            tapHandler.removeCallbacks(pending)
+            pendingTap = null
+            if (left == lastTapLeft) {
+                turnPage(left)
+                return true
+            }
+        }
+        lastTapLeft = left
+        val image = (event.targetElement?.content as? Content.ImageElement)?.takeIf { readerPrefs.tapToZoom }
+        val single = Runnable {
+            pendingTap = null
+            if (image != null) openImage(image) else showChrome(!chromeVisible)
+        }
+        pendingTap = single
+        tapHandler.postDelayed(single, DOUBLE_TAP_MS)
+        return true
+    }
+
+    private fun turnPage(tapLeft: Boolean) {
+        if (isForward(tapLeft, readerPrefs.pageTurn, bookIsRtl)) navigator.goForward() else navigator.goBackward()
+    }
+
+    private fun openImage(image: Content.ImageElement) {
+        val publication = session?.publication ?: return
+        lifecycleScope.launch {
+            val bitmap = withContext(Dispatchers.IO) {
+                publication.get(image.embeddedLink)?.use { it.read().getOrNull() }?.let { decodeForViewer(it) }
+            }
+            if (bitmap == null) {
+                Toast.makeText(this@EpubReaderActivity, "This picture can't be zoomed.", Toast.LENGTH_SHORT).show()
+            } else {
+                zoomed = bitmap to image.caption
+            }
+        }
     }
 
     private fun save(locator: Locator) {
@@ -180,6 +260,16 @@ class EpubReaderActivity : AppCompatActivity() {
         container.applicationScope.launch { container.preferences.update { it.copy(epubPreferencesJson = json) } }
     }
 
+    private fun applyReaderPrefs(newPrefs: ReaderPrefs) {
+        readerPrefs = newPrefs
+        container.applicationScope.launch { container.preferences.update { it.copy(reader = newPrefs) } }
+    }
+
+    private fun dismissHints() {
+        showHints = false
+        container.applicationScope.launch { container.preferences.update { it.copy(readerHintsShown = true) } }
+    }
+
     private fun showChrome(visible: Boolean) {
         chromeVisible = visible
         WindowCompat.getInsetsController(window, window.decorView).run {
@@ -199,6 +289,7 @@ class EpubReaderActivity : AppCompatActivity() {
     companion object {
         private const val EXTRA_SOURCE_ID = "source_id"
         private const val NAVIGATOR_TAG = "navigator"
+        private const val DOUBLE_TAP_MS = 300L
 
         fun intent(context: Context, sourceId: Long) =
             Intent(context, EpubReaderActivity::class.java).putExtra(EXTRA_SOURCE_ID, sourceId)
